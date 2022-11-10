@@ -1,521 +1,304 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
 
-<HTML>
 
- <HEAD>
-
-  <TITLE> New Document </TITLE>
-
-  <META NAME="Generator" CONTENT="EditPlus">
-
-  <META NAME="Author" CONTENT="">
-
-  <META NAME="Keywords" CONTENT="">
-
-  <META NAME="Description" CONTENT="">
-
-  <style>
-
-  html, body {
-
-  height: 100%;
-
-  padding: 0;
-
-  margin: 0;
-
-  background: #000;
-
-}
-
-canvas {
-
-  position: absolute;
-
-  width: 100%;
-
-  height: 100%;
-
-}
-
-  </style>
-
- </HEAD>
-
-
- <BODY>
-
-  <canvas id="pinkboard"></canvas>
-
-  <script>
-
-  /*
-
- * Settings
-
- */
-
-var settings = {
-
-  particles: {
-
-    length:   500, // maximum amount of particles
-
-    duration:   2, // particle duration in sec
-
-    velocity: 100, // particle velocity in pixels/sec
-
-    effect: -0.75, // play with this for a nice effect
-
-    size:      30, // particle size in pixels
-
-  },
-
-};
-
-
-/*
-
- * RequestAnimationFrame polyfill by Erik Möller
-
- */
-
-(function(){var b=0;var c=["ms","moz","webkit","o"];for(var a=0;a<c.length&&!window.requestAnimationFrame;++a){window.requestAnimationFrame=window[c[a]+"RequestAnimationFrame"];window.cancelAnimationFrame=window[c[a]+"CancelAnimationFrame"]||window[c[a]+"CancelRequestAnimationFrame"]}if(!window.requestAnimationFrame){window.requestAnimationFrame=function(h,e){var d=new Date().getTime();var f=Math.max(0,16-(d-b));var g=window.setTimeout(function(){h(d+f)},f);b=d+f;return g}}if(!window.cancelAnimationFrame){window.cancelAnimationFrame=function(d){clearTimeout(d)}}}());
-
-
-/*
-
- * Point class
-
- */
-
-var Point = (function() {
-
-  function Point(x, y) {
-
-    this.x = (typeof x !== 'undefined') ? x : 0;
-
-    this.y = (typeof y !== 'undefined') ? y : 0;
-
-  }
-
-  Point.prototype.clone = function() {
-
-    return new Point(this.x, this.y);
-
-  };
-
-  Point.prototype.length = function(length) {
-
-    if (typeof length == 'undefined')
-
-      return Math.sqrt(this.x * this.x + this.y * this.y);
-
-    this.normalize();
-
-    this.x *= length;
-
-    this.y *= length;
-
-    return this;
-
-  };
-
-  Point.prototype.normalize = function() {
-
-    var length = this.length();
-
-    this.x /= length;
-
-    this.y /= length;
-
-    return this;
-
-  };
-
-  return Point;
-
-})();
-
-
-/*
-
- * Particle class
-
- */
-
-var Particle = (function() {
-
-  function Particle() {
-
-    this.position = new Point();
-
-    this.velocity = new Point();
-
-    this.acceleration = new Point();
-
-    this.age = 0;
-
-  }
-
-  Particle.prototype.initialize = function(x, y, dx, dy) {
-
-    this.position.x = x;
-
-    this.position.y = y;
-
-    this.velocity.x = dx;
-
-    this.velocity.y = dy;
-
-    this.acceleration.x = dx * settings.particles.effect;
-
-    this.acceleration.y = dy * settings.particles.effect;
-
-    this.age = 0;
-
-  };
-
-  Particle.prototype.update = function(deltaTime) {
-
-    this.position.x += this.velocity.x * deltaTime;
-
-    this.position.y += this.velocity.y * deltaTime;
-
-    this.velocity.x += this.acceleration.x * deltaTime;
-
-    this.velocity.y += this.acceleration.y * deltaTime;
-
-    this.age += deltaTime;
-
-  };
-
-  Particle.prototype.draw = function(context, image) {
-
-    function ease(t) {
-
-      return (--t) * t * t + 1;
-
-    }
-
-    var size = image.width * ease(this.age / settings.particles.duration);
-
-    context.globalAlpha = 1 - this.age / settings.particles.duration;
-
-    context.drawImage(image, this.position.x - size / 2, this.position.y - size / 2, size, size);
-
-  };
-
-  return Particle;
-
-})();
-
-
-/*
-
- * ParticlePool class
-
- */
-
-var ParticlePool = (function() {
-
-  var particles,
-
-      firstActive = 0,
-
-      firstFree   = 0,
-
-      duration    = settings.particles.duration;
-
- 
-
-  function ParticlePool(length) {
-
-    // create and populate particle pool
-
-    particles = new Array(length);
-
-    for (var i = 0; i < particles.length; i++)
-
-      particles[i] = new Particle();
-
-  }
-
-  ParticlePool.prototype.add = function(x, y, dx, dy) {
-
-    particles[firstFree].initialize(x, y, dx, dy);
-
-   
-
-    // handle circular queue
-
-    firstFree++;
-
-    if (firstFree   == particles.length) firstFree   = 0;
-
-    if (firstActive == firstFree       ) firstActive++;
-
-    if (firstActive == particles.length) firstActive = 0;
-
-  };
-
-  ParticlePool.prototype.update = function(deltaTime) {
-
-    var i;
-
-   
-
-    // update active particles
-
-    if (firstActive < firstFree) {
-
-      for (i = firstActive; i < firstFree; i++)
-
-        particles[i].update(deltaTime);
-
-    }
-
-    if (firstFree < firstActive) {
-
-      for (i = firstActive; i < particles.length; i++)
-
-        particles[i].update(deltaTime);
-
-      for (i = 0; i < firstFree; i++)
-
-        particles[i].update(deltaTime);
-
-    }
-
-   
-
-    // remove inactive particles
-
-    while (particles[firstActive].age >= duration && firstActive != firstFree) {
-
-      firstActive++;
-
-      if (firstActive == particles.length) firstActive = 0;
-
-    }
-
-   
-
-   
-
-  };
-
-  ParticlePool.prototype.draw = function(context, image) {
-
-    // draw active particles
-
-    if (firstActive < firstFree) {
-
-      for (i = firstActive; i < firstFree; i++)
-
-        particles[i].draw(context, image);
-
-    }
-
-    if (firstFree < firstActive) {
-
-      for (i = firstActive; i < particles.length; i++)
-
-        particles[i].draw(context, image);
-
-      for (i = 0; i < firstFree; i++)
-
-        particles[i].draw(context, image);
-
-    }
-
-  };
-
-  return ParticlePool;
-
-})();
-
-
-/*
-
- * Putting it all together
-
- */
-
-(function(canvas) {
-
-  var context = canvas.getContext('2d'),
-
-      particles = new ParticlePool(settings.particles.length),
-
-      particleRate = settings.particles.length / settings.particles.duration, // particles/sec
-
-      time;
-
- 
-
-  // get point on heart with -PI <= t <= PI
-
-  function pointOnHeart(t) {
-
-    return new Point(
-
-      160 * Math.pow(Math.sin(t), 3),
-
-      130 * Math.cos(t) - 50 * Math.cos(2 * t) - 20 * Math.cos(3 * t) - 10 * Math.cos(4 * t) + 25
-
-    );
-
-  }
-
- 
-
-  // creating the particle image using a dummy canvas
-
-  var image = (function() {
-
-    var canvas  = document.createElement('canvas'),
-
-        context = canvas.getContext('2d');
-
-    canvas.width  = settings.particles.size;
-
-    canvas.height = settings.particles.size;
-
-    // helper function to create the path
-
-    function to(t) {
-
-      var point = pointOnHeart(t);
-
-      point.x = settings.particles.size / 2 + point.x * settings.particles.size / 350;
-
-      point.y = settings.particles.size / 2 - point.y * settings.particles.size / 350;
-
-      return point;
-
-    }
-
-    // create the path
-
-    context.beginPath();
-
-    var t = -Math.PI;
-
-    var point = to(t);
-
-    context.moveTo(point.x, point.y);
-
-    while (t < Math.PI) {
-
-      t += 0.01; // baby steps!
-
-      point = to(t);
-
-      context.lineTo(point.x, point.y);
-
-    }
-
-    context.closePath();
-
-    // create the fill
-
-    context.fillStyle = '#ea80b0';
-
-    context.fill();
-
-    // create the image
-
-    var image = new Image();
-
-    image.src = canvas.toDataURL();
-
-    return image;
-
-  })();
-
- 
-
-  // render that thing!
-
-  function render() {
-
-    // next animation frame
-
-    requestAnimationFrame(render);
-
-   
-
-    // update time
-
-    var newTime   = new Date().getTime() / 1000,
-
-        deltaTime = newTime - (time || newTime);
-
-    time = newTime;
-
-   
-
-    // clear canvas
-
-    context.clearRect(0, 0, canvas.width, canvas.height);
-
-   
-
-    // create new particles
-
-    var amount = particleRate * deltaTime;
-
-    for (var i = 0; i < amount; i++) {
-
-      var pos = pointOnHeart(Math.PI - 2 * Math.PI * Math.random());
-
-      var dir = pos.clone().length(settings.particles.velocity);
-
-      particles.add(canvas.width / 2 + pos.x, canvas.height / 2 - pos.y, dir.x, -dir.y);
-
-    }
-
-   
-
-    // update and draw particles
-
-    particles.update(deltaTime);
-
-    particles.draw(context, image);
-
-  }
-
- 
-
-  // handle (re-)sizing of the canvas
-
-  function onResize() {
-
-    canvas.width  = canvas.clientWidth;
-
-    canvas.height = canvas.clientHeight;
-
-  }
-
-  window.onresize = onResize;
-
- 
-
-  // delay rendering bootstrap
-
-  setTimeout(function() {
-
-    onResize();
-
-    render();
-
-  }, 10);
-
-})(document.getElementById('pinkboard'));
-
-  </script>
-
- </BODY>
-
-</HTML>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="./assets/css/style.css">
+    <!-- Link file responsive ở phía sau file style.css để tránh hiện tượng
+         file responsive bị file style.css ghi đè -->
+    <link rel="stylesheet" href="./assets/css/responsive.css">
+    <link rel="stylesheet" href="./assets/themify-icons/themify-icons.css">
+    <title></title>
+</head>
+
+<body>
+    <div class="main">
+
+        <!-- Begin Header -->
+    
+        <div class="max-width-100" id="header">
+    
+            <ul id="nav" class="max-width-100">
+                <li><a href="#">Home</a></li>
+                <li><a href="#band">Band</a></li>
+                <li><a href="#tour-dates">Tour</a></li>
+                <li><a href="#contact">Contact</a></li>
+                <li>
+                    <a href="">
+                        More
+                        <i class="ti-angle-down"></i>
+                    </a>
+                    <ul id="subnav">
+                        <li><a href="#">Merchadise</a></li>
+                        <li><a href="#">Extras</a></li>
+                        <li><a href="#">Media</a></li>
+                    </ul>
+                </li>
+                <!-- Search Btn -->
+                <a href="" class="search-btn">
+                    <i class="ti-search"></i>
+                </a href="">
+                
+                <!-- Menu Bar -->
+                <div href="" class="menu-bar" id="mobile-menu">
+                    <i class="ti-menu"></i>
+                </div>
+            </ul>
+            
+        </div>
+        <!-- End Header -->
+    
+        <!-- Begin Slider -->
+        <div class="slider ">
+            <div class="slider-head">
+                <h2 class="slider-head-1">New York</h2>
+                <h2 class="slider-head-2">The atmosphere in New York is lorem ipsum.</h2>
+            </div>
+        </div>
+    
+        <div class="content max-width-100" id="band">
+            <div class="content-section">
+                <h2 class="content-heading">The band</h2>
+                <h2 class="content-sub-heading">We love music</h2>
+                <p id="content-paragraph">We have created a fictional band website. Lorem ipsum dolor sit amet, consectetur
+                    adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
+                    veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute
+                    irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur
+                    sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum
+                    consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim
+                    ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+    
+                <div class="members-list">
+                    <div class="member-inf text-center">
+                        <p id="member-name">Name</p>
+                        <img id="member-img" src="./assets/img/band_member/member_1.jpg"
+                            alt="name member">
+                    </div>
+    
+                    <div class="member-inf text-center">
+                        <p id="member-name">Name</p>
+                        <img id="member-img" src="./assets/img/band_member/member_1.jpg"
+                            alt="name member">
+                    </div>
+    
+                    <div class="member-inf text-center">
+                        <p id="member-name">Name</p>
+                        <img id="member-img" src="./assets/img/band_member/member_1.jpg"
+                            alt="name member">
+                    </div>
+                    <!-- <div class="clear"></div> -->
+                </div>
+            </div>
+    
+            <!-- Tour Dates -->
+    
+            <div class="tour-dates" id="tour-dates">
+                <div class="content-section">
+                    <h2 class="content-heading text-white">Tour Dates</h2>
+                    <h2 class="content-sub-heading text-white">Remember to book your tickets!</h2>
+    
+                    <!-- Ticket list -->
+                    <ul class="tickets-list">
+                        <li>September <span class="sold-out">Sold out</span></li>
+                        <li>October <span class="sold-out">Sold out</span></li>
+                        <li>September <span id="ticket-quantity">3</span> </li>
+                    </ul>
+    
+                    <!-- Places -->
+                <div class="tour-places">
+    
+                    <div class="tour-place">
+                        <img class="place-img" src="./assets/img/tour_places/newyork.jpg" alt="New York">
+                        <div class="place-inf">
+                            <h2 class="place">New York</h2>
+                            <h2 class="time">Fri 27 Nov 2016</h2>
+                            <h2 class="description">Praesent tincidunt sed tellus ut rutrum sed vitae justo.</h2>
+                            <button class="buy-ticket js-buy-ticket">Buy Tickets</button>
+                        </div>
+                    </div>
+    
+                    <div class="tour-place">
+                        <img class="place-img" src="./assets/img/tour_places/paris.jpg" alt="Paris">
+                        <div class="place-inf">
+                            <h2 class="place">Paris</h2>
+                            <h2 class="time">Sat 28 Nov 2016</h2>
+                            <h2 class="description">Praesent tincidunt sed tellus ut rutrum sed vitae justo.</h2>
+                            <button class="buy-ticket js-buy-ticket">Buy Tickets</button>
+                        </div>
+                    </div>
+    
+                    <div class="tour-place">
+                        <img class="place-img" src="./assets/img/tour_places/sanfran.jpg" alt="San Francisco">
+                        <div class="place-inf">
+                            <h2 class="place">San Francisco</h2>
+                            <h2 class="time">Sun Nov 29 2016</h2>
+                            <h2 class="description">Praesent tincidunt sed tellus ut rutrum sed vitae justo.</h2>
+                            <button class="buy-ticket js-buy-ticket">Buy Tickets</button>
+                        </div>
+                    </div>
+                    <div class="clear"></div>
+                </div>
+            </div>
+                </div>
+    
+    
+                
+    
+            <!-- Buy ticket modal -->
+            <div class="modal js-modal">
+                <div class="modal-container js-modal-container">
+                    <div class="modal-close js-modal-close">
+                        <i class="ti-close"></i>
+                    </div>
+    
+                    <div class="modal-header">
+                        <i class="ti-bag"></i>
+                        Tickets
+                    </div>
+    
+                    <div class="modal-body">
+                        <label class="modal-label" for="shopping-cart">
+                            <i class="ti-shopping-cart" ></i>
+                            Tickets, 15$ per person
+                        </label>
+                        <input id="shopping-cart" class="modal-input" type="text" placeholder="How many?">
+    
+                        <label class="modal-label" for="user">
+                            <i class="ti-user" ></i>
+                            Send to
+                        </label>
+                        <input id="user" class="modal-input" type="text" placeholder="Enter email">
+    
+                        <button id="pay-tickets">
+                            Pay
+                            <i class="ti-check"></i>
+                        </button>
+    
+                        <div class="modal-help">
+                            Need <a href="">help?</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Contact -->
+            <div class="contact" id="contact">
+                <div class="content-section">
+                    <h2 class="content-heading">Contact</h2>
+                    <h2 class="content-sub-heading">Fan?Drop a note!</h2>
+                    
+                    <div class="contact-body">
+                        <div class="row">
+                            <div class="col col-half">
+                                <p><i class="ti-location-arrow contact-icon"></i>Chicago, US</p>
+                                <p><i class="ti-mobile contact-icon"></i>Phone: +00 151515</p>
+                                <p><i class="ti-email contact-icon"></i>Email: mail@mail.com</p>
+                            </div>
+                            <div class="col col-half">
+                            <form action="">
+                                <div class="row">
+                                    <div class="col col-half">
+                                        <input type="text" placeholder="Name" required  class="form-control">
+                                    </div>
+    
+                                    <div class="col col-half">
+                                        <input type="email" placeholder="Email" required  class="form-control">
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col col-full">
+                                        <input type="text" placeholder="Message" required class="form-control">
+                                    </div>
+                                </div>
+                                <button class="contact-send-btn" type="submit">SEND</button>
+                            </form>
+    
+                            
+                            </div>
+                        </div>
+                    </div>
+                    
+                </div>  
+            </div>
+    
+            <!-- Image -->
+            <div class="img-place">
+                <img src="./assets/img/img-place/map.jpg" alt="">
+            </div>
+    
+            <!-- Footer -->
+            <div class="footer">
+                <div class="footer-icon">
+                    <a href=""><i class="ti-facebook"></i></a>
+                    <a href=""><i class="ti-instagram"></i></a>
+                    <a href=""><i class="ti-twitter"></i></a>
+                    <a href=""><i class="ti-pinterest"></i></a>
+                    <a href=""><i class="ti-linkedin"></i></a>
+                </div>
+    
+                <div class="footer-power">Power by <a href="">w3.css</a></div>
+            </div>
+        </div>
+    
+        <script>
+            const buyBtns = document.querySelectorAll('.js-buy-ticket')
+            const modal = document.querySelector('.js-modal')
+            const modalClose = document.querySelector('.js-modal-close')
+            const modalContainer = document.querySelector('.js-modal-container')
+    
+            // Hàm hiển thị ra cửa sổ mua vé khi click vào buy tickets
+            function showBuyTickets(){
+                modal.classList.add('open')
+            }
+    
+            // Hàm bấm vào dấu x thì nó mất cửa số mua vé
+            function hideBuyTickets(){
+                modal.classList.remove('open')
+            }
+    
+            // nghe hành vi click vào nút Buy Tickets
+            for(const buyBtn of buyBtns ) {
+                buyBtn.addEventListener('click', showBuyTickets)
+            }
+    
+            // Nghe hành vi click vào nút x tắt cửa sổ mua vé
+            modalClose.addEventListener('click', hideBuyTickets)
+    
+            modal.addEventListener('click', hideBuyTickets)
+    
+            modalContainer.addEventListener('click', function (event) {
+                event.stopPropagation()
+            })
+        </script>
+    
+        <script>
+            var header = document.getElementById('header');
+            var headerHeight = header.clientHeight;
+            // var headerClass = document.getElementsByClassName('header');
+            var mobile_menu = document.getElementById('mobile-menu');
+            var navBtns = document.querySelectorAll('#nav li a[href*="#"]');
+            mobile_menu.onclick = function(){
+                var isClosed = header.clientHeight === headerHeight;
+                if(isClosed) {
+                    header.style.height = 'auto';
+                } else {
+                    header.style.height = null;
+                }
+            }
+
+            for(var i = 0; i < navBtns.length; i++){
+                var navBtn = navBtns[i];
+
+                navBtn.onclick = function() {
+                    header.style.height = null;
+                }
+            }
+        </script>
+    </div>    
+
+</body>
+
+</html>
